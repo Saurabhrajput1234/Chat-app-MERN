@@ -1,12 +1,21 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 .chat-container {
   max-width: 1000px;
+  width: 100%;
   margin: 0 auto;
-  padding: 2rem;
-  height: 100vh;
+  padding: 0.5rem;
+  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: #ffffff;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+  position: relative;
 }
 
 .login-container {
@@ -14,15 +23,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  gap: 1.5rem;
+  min-height: 100vh;
+  gap: 1rem;
   background: #f5f7fa;
   border-radius: 1rem;
-  padding: 2rem;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
 }
 
 .login-container h2 {
-  font-size: 2.5rem;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
   color: #2d3748;
   margin-bottom: 1rem;
   font-weight: 700;
@@ -31,11 +43,10 @@
 
 .login-container input {
   width: 100%;
-  max-width: 400px;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   border: 2px solid #e2e8f0;
   border-radius: 0.75rem;
-  font-size: 1.1rem;
+  font-size: 1rem;
   background: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
@@ -46,12 +57,13 @@
 }
 
 .login-container button {
-  padding: 1rem 2.5rem;
+  width: 100%;
+  padding: 0.75rem 1.5rem;
   background: #646cff;
   color: white;
   border: none;
   border-radius: 0.75rem;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 4px 6px rgba(100, 108, 255, 0.2);
@@ -65,42 +77,67 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 0;
-  margin-bottom: 1.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
   border-bottom: 2px solid #f0f2f5;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background: white;
+  border-radius: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .chat-header h2 {
-  font-size: 1.8rem;
+  font-size: clamp(1.25rem, 3vw, 1.8rem);
   color: #2d3748;
   font-weight: 700;
 }
 
 .status {
   color: #4a5568;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   padding: 0.5rem 1rem;
   background: #f7fafc;
   border-radius: 2rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 0.75rem;
   background: #f8fafc;
   border-radius: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
 }
 
 .message {
-  margin-bottom: 1.25rem;
-  padding: 1rem 1.25rem;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
   background: white;
   border-radius: 1rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  max-width: 80%;
+  max-width: 85%;
+  word-wrap: break-word;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .own-message {
@@ -125,41 +162,46 @@
 .username {
   font-weight: 600;
   color: #646cff;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   display: block;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .message-text {
-  margin: 0.5rem 0;
+  margin: 0.25rem 0;
   color: #2d3748;
-  line-height: 1.5;
-  font-size: 1.05rem;
+  line-height: 1.4;
+  font-size: 1rem;
+  word-break: break-word;
 }
 
 .timestamp {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #718096;
   display: block;
   text-align: right;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .message-form {
   display: flex;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   background: white;
   border-radius: 1rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 
 .message-form input {
   flex: 1;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1rem;
   border: 2px solid #e2e8f0;
   border-radius: 0.75rem;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  min-width: 0;
 }
 
 .message-form input:focus {
@@ -168,15 +210,17 @@
 }
 
 .message-form button {
-  padding: 1rem 2rem;
+  padding: 0.75rem 1.5rem;
   background: #646cff;
   color: white;
   border: none;
   border-radius: 0.75rem;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 4px 6px rgba(100, 108, 255, 0.2);
+  white-space: nowrap;
+  min-width: fit-content;
 }
 
 .message-form button:hover {
@@ -189,15 +233,17 @@
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
   margin-bottom: 1rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   text-align: center;
   border: 1px solid #fecaca;
+  width: 100%;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
   .chat-container {
-    padding: 1rem;
+    padding: 0.25rem;
+    height: 100vh;
+    height: 100dvh;
   }
 
   .message {
@@ -205,18 +251,84 @@
   }
 
   .login-container {
-    padding: 1.5rem;
-  }
-
-  .login-container h2 {
-    font-size: 2rem;
+    padding: 1rem;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .message-form {
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
 
   .message-form button {
-    padding: 1rem 1.5rem;
+    padding: 0.75rem 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .status {
+    width: 100%;
+    text-align: center;
+  }
+
+  .message {
+    max-width: 95%;
+  }
+
+  .message-form {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .message-form button {
+    width: 100%;
+  }
+
+  .messages-container {
+    padding: 0.5rem;
+  }
+}
+
+@media (max-height: 600px) {
+  .chat-container {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .login-container {
+    padding: 1rem;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .messages-container {
+    max-height: 60vh;
+  }
+
+  .chat-header {
+    padding: 0.5rem;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .chat-container {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .login-container {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .messages-container {
+    max-height: 50vh;
   }
 } 
