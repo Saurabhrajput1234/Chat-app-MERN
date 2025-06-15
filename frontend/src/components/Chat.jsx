@@ -6,6 +6,7 @@ const Chat = () => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState('');
   const ws = useRef(null);
 
   useEffect(() => {
@@ -18,33 +19,49 @@ const Chat = () => {
 
   const connectWebSocket = () => {
     if (!username.trim()) {
-      alert('Please enter a username');
+      setError('Please enter a username');
       return;
     }
 
-    ws.current = new WebSocket(import.meta.env.VITE_WS_URL || 'ws://localhost:5000');
-
-    ws.current.onopen = () => {
-      setIsConnected(true);
-    };
-
-    ws.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'history') {
-        setMessages(data.messages);
-      } else if (data.type === 'message') {
-        setMessages(prev => [...prev, data.message]);
+    try {
+      const baseUrl = import.meta.env.VITE_WS_URL;
+      const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws';
+      
+      if (!wsUrl) {
+        setError('WebSocket URL not configured');
+        return;
       }
-    };
 
-    ws.current.onclose = () => {
-      setIsConnected(false);
-    };
+      ws.current = new WebSocket(wsUrl);
 
-    ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      ws.current.onopen = () => {
+        setIsConnected(true);
+        setError('');
+      };
+
+      ws.current.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'history') {
+          setMessages(data.messages);
+        } else if (data.type === 'message') {
+          setMessages(prev => [...prev, data.message]);
+        }
+      };
+
+      ws.current.onclose = () => {
+        setIsConnected(false);
+        setError('Connection lost. Please try again.');
+      };
+
+      ws.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setError('Connection error. Please try again.');
+        setIsConnected(false);
+      };
+    } catch (error) {
+      setError('Failed to connect. Please try again.');
       setIsConnected(false);
-    };
+    }
   };
 
   const sendMessage = (e) => {
@@ -68,6 +85,7 @@ const Chat = () => {
       <div className="chat-container">
         <div className="login-container">
           <h2>Join Chat</h2>
+          {error && <div className="error-message">{error}</div>}
           <input
             type="text"
             placeholder="Enter your username"
