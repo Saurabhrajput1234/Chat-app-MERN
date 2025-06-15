@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const Message = require('../models/Message');
 
 const allowedOrigins = [
-  'https://chat-app-mern-eosin.vercel.app',
+  'https://chat-app-mern-web.onrender.com',
   'http://localhost:5173',
   'http://localhost:5174'
 ];
@@ -29,7 +29,6 @@ class WebSocketController {
   }
 
   setupKeepAlive() {
-    // Send ping every 30 seconds to keep connection alive
     setInterval(() => {
       this.wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
@@ -40,7 +39,6 @@ class WebSocketController {
   }
 
   handleConnection(ws) {
-    // Set a timeout for the connection
     const timeout = setTimeout(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
@@ -48,7 +46,6 @@ class WebSocketController {
     }, 60000); // 1 minute timeout
 
     ws.on('pong', () => {
-      // Reset timeout on pong
       clearTimeout(timeout);
     });
 

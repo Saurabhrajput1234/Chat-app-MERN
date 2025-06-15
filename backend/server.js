@@ -12,14 +12,13 @@ const server = http.createServer(app);
 
 // CORS Configuration
 const allowedOrigins = [
-  'https://chat-app-mern-eosin.vercel.app',
+  'https://chat-app-mern-web.onrender.com',
   'http://localhost:5173',
   'http://localhost:5174'
 ];
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) === -1) {
@@ -34,7 +33,6 @@ app.use(cors({
 
 app.use(express.json());
 
-// MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI;
 console.log('Connecting to MongoDB:', MONGODB_URI);
 
@@ -42,7 +40,6 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Initialize WebSocket server
 const wss = new WebSocket.Server({ 
   server,
   maxPayload: 50 * 1024 * 1024, 
@@ -52,11 +49,9 @@ const wss = new WebSocket.Server({
   pingTimeout: 60000
 });
 
-// Initialize controllers
 const messageController = require('./controllers/messageController');
 const WebSocketController = require('./controllers/websocketController');
 
-// WebSocket Server
 wss.on('connection', (ws) => {
   console.log('New client connected');
 
@@ -98,7 +93,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Initialize WebSocket controller
 const wsController = new WebSocketController(wss);
 
 // HTTP Routes
@@ -118,7 +112,6 @@ server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Handle process termination
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
   server.close(() => {
