@@ -9,6 +9,7 @@ const Chat = () => {
   const [error, setError] = useState('');
   const ws = useRef(null);
   const messagesEndRef = useRef(null);
+  const reconnectTimeout = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -23,6 +24,9 @@ const Chat = () => {
       if (ws.current) {
         ws.current.close();
       }
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+      }
     };
   }, []);
 
@@ -30,6 +34,7 @@ const Chat = () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
       const response = await fetch(`${apiUrl}/messages`);
+      if (!response.ok) throw new Error('Failed to fetch messages');
       const data = await response.json();
       setMessages(data);
     } catch (err) {
@@ -42,6 +47,10 @@ const Chat = () => {
     if (!username.trim()) {
       setError('Please enter a username');
       return;
+    }
+
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.close();
     }
 
     try {
@@ -76,16 +85,28 @@ const Chat = () => {
           
           if (data.type === 'message') {
             setMessages(prev => [...prev, data.message]);
+          } else if (data.type === 'ack') {
+            console.log('Received acknowledgment:', data.status);
+          } else if (data.type === 'error') {
+            setError(data.message);
           }
         } catch (err) {
           console.error('Error parsing message:', err);
+          setError('Invalid message received');
         }
       };
 
-      ws.current.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.current.onclose = (event) => {
+        console.log('WebSocket disconnected:', event.code, event.reason);
         setIsConnected(false);
-        setError('Connection lost. Please try again.');
+        setError('Connection lost. Reconnecting...');
+        
+        // Attempt to reconnect after 3 seconds
+        reconnectTimeout.current = setTimeout(() => {
+          if (username) {
+            connectWebSocket();
+          }
+        }, 3000);
       };
 
       ws.current.onerror = (error) => {
@@ -104,6 +125,7 @@ const Chat = () => {
     e.preventDefault();
     
     if (!message.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      setError('Cannot send message: Connection not available');
       return;
     }
 

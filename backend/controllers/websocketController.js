@@ -22,23 +22,30 @@ class WebSocketController {
         this.handleConnection(ws);
       } else {
         console.warn('Connection rejected from:', origin);
-        ws.close();
+        ws.close(1008, 'Origin not allowed');
       }
     });
   }
 
   setupKeepAlive() {
-    setInterval(() => {
+    const interval = setInterval(() => {
       this.wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.ping();
         }
       });
-    }, 30000); // 30 sec ping
+    }, 30000);
+
+    this.wss.on('close', () => {
+      clearInterval(interval);
+    });
   }
 
   handleConnection(ws) {
     let isAlive = true;
+    let messageQueue = [];
+    let isProcessing = false;
+
     ws.on('pong', () => {
       isAlive = true;
     });
@@ -47,16 +54,21 @@ class WebSocketController {
       if (!isAlive) {
         ws.terminate();
         clearInterval(interval);
+        return;
       }
       isAlive = false;
       ws.ping();
     }, 60000);
 
-    ws.on('message', async (msg) => {
+    const processQueue = async () => {
+      if (isProcessing || messageQueue.length === 0) return;
+      
+      isProcessing = true;
       try {
-        const data = JSON.parse(msg);
+        const data = messageQueue.shift();
         if (data.type === 'username') {
           ws.username = data.username;
+          ws.send(JSON.stringify({ type: 'ack', status: 'username_set' }));
         } else if (data.type === 'message') {
           const newMessage = new Message({
             username: data.username,
@@ -65,9 +77,27 @@ class WebSocketController {
           });
           await newMessage.save();
           this.broadcastMessage(newMessage);
+          ws.send(JSON.stringify({ type: 'ack', status: 'message_sent' }));
         }
       } catch (err) {
+        console.error('Error processing message:', err);
+        ws.send(JSON.stringify({ type: 'error', message: 'Failed to process message' }));
+      } finally {
+        isProcessing = false;
+        if (messageQueue.length > 0) {
+          processQueue();
+        }
+      }
+    };
+
+    ws.on('message', async (msg) => {
+      try {
+        const data = JSON.parse(msg);
+        messageQueue.push(data);
+        processQueue();
+      } catch (err) {
         console.error('Error parsing message:', err);
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
       }
     });
 
@@ -85,10 +115,14 @@ class WebSocketController {
   broadcastMessage(message) {
     this.wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'message',
-          message
-        }));
+        try {
+          client.send(JSON.stringify({
+            type: 'message',
+            message
+          }));
+        } catch (err) {
+          console.error('Error broadcasting message:', err);
+        }
       }
     });
   }
