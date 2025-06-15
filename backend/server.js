@@ -23,7 +23,15 @@ mongoose.connect(MONGODB_URI)
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Initialize WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ 
+  server,
+  // Increase the maximum payload size
+  maxPayload: 50 * 1024 * 1024, // 50MB
+  // Add ping interval
+  pingInterval: 30000,
+  // Add ping timeout
+  pingTimeout: 60000
+});
 
 // Initialize controllers
 const messageController = require('./controllers/messageController');
@@ -78,10 +86,38 @@ const wsController = new WebSocketController(wss);
 app.get('/messages', messageController.getMessages);
 app.post('/messages', messageController.createMessage);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Routes
 app.use('/api/messages', messageRoutes);
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// Handle process termination
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
 }); 
