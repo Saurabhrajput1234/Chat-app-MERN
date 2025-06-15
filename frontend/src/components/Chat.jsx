@@ -8,6 +8,15 @@ const Chat = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState('');
   const ws = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -32,23 +41,38 @@ const Chat = () => {
         return;
       }
 
+      console.log('Connecting to WebSocket:', wsUrl);
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
+        console.log('WebSocket connected');
         setIsConnected(true);
         setError('');
+        
+        // Send username to server
+        ws.current.send(JSON.stringify({
+          type: 'username',
+          username: username
+        }));
       };
 
       ws.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'history') {
-          setMessages(data.messages);
-        } else if (data.type === 'message') {
-          setMessages(prev => [...prev, data.message]);
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Received message:', data);
+          
+          if (data.type === 'history') {
+            setMessages(data.messages || []);
+          } else if (data.type === 'message') {
+            setMessages(prev => [...prev, data.message]);
+          }
+        } catch (err) {
+          console.error('Error parsing message:', err);
         }
       };
 
       ws.current.onclose = () => {
+        console.log('WebSocket disconnected');
         setIsConnected(false);
         setError('Connection lost. Please try again.');
       };
@@ -59,6 +83,7 @@ const Chat = () => {
         setIsConnected(false);
       };
     } catch (error) {
+      console.error('Error setting up WebSocket:', error);
       setError('Failed to connect. Please try again.');
       setIsConnected(false);
     }
@@ -72,12 +97,20 @@ const Chat = () => {
     }
 
     const messageData = {
-      username,
-      message: message.trim()
+      type: 'message',
+      username: username,
+      message: message.trim(),
+      timestamp: new Date().toISOString()
     };
 
-    ws.current.send(JSON.stringify(messageData));
-    setMessage('');
+    try {
+      ws.current.send(JSON.stringify(messageData));
+      setMessage('');
+      setError('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setError('Failed to send message. Please try again.');
+    }
   };
 
   if (!isConnected) {
@@ -105,7 +138,7 @@ const Chat = () => {
         <h2>Chat Room</h2>
         <span className="status">Connected as: {username}</span>
       </div>
-      
+      {error && <div className="error-message">{error}</div>}
       <div className="messages-container">
         {messages.map((msg, index) => (
           <div key={index} className={`message ${msg.username === username ? 'own-message' : ''}`}>
@@ -116,6 +149,7 @@ const Chat = () => {
             </span>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
 
       <form onSubmit={sendMessage} className="message-form">
