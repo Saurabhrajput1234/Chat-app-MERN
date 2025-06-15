@@ -16,13 +16,12 @@ class WebSocketController {
 
   setupWebSocket() {
     this.wss.on('connection', (ws, req) => {
-      // Check origin
       const origin = req.headers.origin;
       if (!origin || allowedOrigins.includes(origin)) {
-        console.log('New client connected from:', origin);
+        console.log('Client connected from:', origin || 'unknown');
         this.handleConnection(ws);
       } else {
-        console.log('Connection rejected from:', origin);
+        console.warn('Connection rejected from:', origin);
         ws.close();
       }
     });
@@ -30,33 +29,34 @@ class WebSocketController {
 
   setupKeepAlive() {
     setInterval(() => {
-      this.wss.clients.forEach((client) => {
+      this.wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.ping();
         }
       });
-    }, 30000);
+    }, 30000); // 30 sec ping
   }
 
   handleConnection(ws) {
-    const timeout = setTimeout(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
-    }, 60000); // 1 minute timeout
-
+    let isAlive = true;
     ws.on('pong', () => {
-      clearTimeout(timeout);
+      isAlive = true;
     });
 
-    ws.on('message', async (message) => {
-      try {
-        const data = JSON.parse(message);
-        console.log('Received:', data);
+    const interval = setInterval(() => {
+      if (!isAlive) {
+        ws.terminate();
+        clearInterval(interval);
+      }
+      isAlive = false;
+      ws.ping();
+    }, 60000);
 
+    ws.on('message', async (msg) => {
+      try {
+        const data = JSON.parse(msg);
         if (data.type === 'username') {
           ws.username = data.username;
-          console.log(`User registered: ${data.username}`);
         } else if (data.type === 'message') {
           const newMessage = new Message({
             username: data.username,
@@ -66,36 +66,32 @@ class WebSocketController {
           await newMessage.save();
           this.broadcastMessage(newMessage);
         }
-      } catch (error) {
-        console.error('Error handling message:', error);
+      } catch (err) {
+        console.error('Error parsing message:', err);
       }
     });
 
     ws.on('close', () => {
-      clearTimeout(timeout);
+      clearInterval(interval);
       console.log('Client disconnected');
     });
 
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      clearTimeout(timeout);
+    ws.on('error', (err) => {
+      console.error('WebSocket error:', err);
+      clearInterval(interval);
     });
   }
 
   broadcastMessage(message) {
     this.wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        try {
-          client.send(JSON.stringify({
-            type: 'message',
-            message: message
-          }));
-        } catch (error) {
-          console.error('Error broadcasting message:', error);
-        }
+        client.send(JSON.stringify({
+          type: 'message',
+          message
+        }));
       }
     });
   }
 }
 
-module.exports = WebSocketController; 
+module.exports = WebSocketController;

@@ -4,13 +4,15 @@ const WebSocket = require('ws');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
-const path = require('path');
+
 const messageRoutes = require('./routes/messageRoutes');
+const WebSocketController = require('./controllers/websocketController');
+const messageController = require('./controllers/messageController');
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS Configuration
+//CORS Configuration
 const allowedOrigins = [
   'https://chat-app-mern-web.onrender.com',
   'http://localhost:5173',
@@ -18,14 +20,12 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('CORS policy does not allow this origin'), false);
     }
-    return callback(null, true);
   },
   methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
@@ -33,103 +33,43 @@ app.use(cors({
 
 app.use(express.json());
 
+//Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI;
-console.log('Connecting to MongoDB:', MONGODB_URI);
-
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB error:', err));
 
-const wss = new WebSocket.Server({ 
-  server,
-  maxPayload: 50 * 1024 * 1024, 
 
-  pingInterval: 30000,
- 
-  pingTimeout: 60000
-});
+const wss = new WebSocket.Server({ server });
 
-const messageController = require('./controllers/messageController');
-const WebSocketController = require('./controllers/websocketController');
+new WebSocketController(wss); 
 
-wss.on('connection', (ws) => {
-  console.log('New client connected');
-
-  ws.on('message', async (message) => {
-    try {
-      const data = JSON.parse(message);
-      console.log('Received:', data);
-
-      if (data.type === 'username') {
-        
-        ws.username = data.username;
-        console.log(`User registered: ${data.username}`);
-      } else if (data.type === 'message') {
-        
-        const newMessage = new Message({
-          username: data.username,
-          message: data.message,
-          timestamp: new Date(data.timestamp)
-        });
-        await newMessage.save();
-
-        // Broadcast message to all clients
-        wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'message',
-              message: newMessage
-            }));
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error handling message:', error);
-    }
-  });
-
-  ws.on('close', () => {
-    console.log('Client disconnected');
-  });
-});
-
-const wsController = new WebSocketController(wss);
-
-// HTTP Routes
+// REST API Routes
 app.get('/messages', messageController.getMessages);
 app.post('/messages', messageController.createMessage);
+app.use('/api/messages', messageRoutes);
 
-// Health check endpoint
+
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Routes
-app.use('/api/messages', messageRoutes);
-
+// Start Server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on 0.0.0.0:${PORT}`);
 });
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+function shutdown(signal) {
+  console.log(`${signal} received: shutting down...`);
   server.close(() => {
-    console.log('HTTP server closed');
     mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
+      console.log('MongoDB disconnected');
       process.exit(0);
     });
   });
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    });
-  });
-}); 
+}
