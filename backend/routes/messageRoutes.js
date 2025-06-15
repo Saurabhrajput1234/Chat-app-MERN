@@ -3,9 +3,9 @@ const router = express.Router();
 const messageController = require('../controllers/messageController');
 
 // Get last 50 messages
-router.get('/', messageController.getMessages);
+router.get('/messages', messageController.getMessages);
 
-// Create a new message
-router.post('/', messageController.createMessage);
+
+router.post('/messages', messageController.createMessage);
 
 module.exports = router; 

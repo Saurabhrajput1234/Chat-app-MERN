@@ -26,6 +26,18 @@ const Chat = () => {
     };
   }, []);
 
+  const fetchMessages = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const response = await fetch(`${apiUrl}/messages`);
+      const data = await response.json();
+      setMessages(data);
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+      setError('Failed to load messages');
+    }
+  };
+
   const connectWebSocket = () => {
     if (!username.trim()) {
       setError('Please enter a username');
@@ -33,9 +45,7 @@ const Chat = () => {
     }
 
     try {
-      const baseUrl = import.meta.env.VITE_WS_URL;
-      const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws';
-      
+      const wsUrl = import.meta.env.VITE_WS_URL;
       if (!wsUrl) {
         setError('WebSocket URL not configured');
         return;
@@ -54,6 +64,9 @@ const Chat = () => {
           type: 'username',
           username: username
         }));
+
+        // Fetch previous messages after connection
+        fetchMessages();
       };
 
       ws.current.onmessage = (event) => {
@@ -61,9 +74,7 @@ const Chat = () => {
           const data = JSON.parse(event.data);
           console.log('Received message:', data);
           
-          if (data.type === 'history') {
-            setMessages(data.messages || []);
-          } else if (data.type === 'message') {
+          if (data.type === 'message') {
             setMessages(prev => [...prev, data.message]);
           }
         } catch (err) {

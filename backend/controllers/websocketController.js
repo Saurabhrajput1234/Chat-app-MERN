@@ -1,3 +1,4 @@
+const WebSocket = require('ws');
 const Message = require('../models/Message');
 
 class WebSocketController {
@@ -7,61 +8,47 @@ class WebSocketController {
   }
 
   setupWebSocket() {
-    this.wss.on('connection', this.handleConnection.bind(this));
+    this.wss.on('connection', (ws) => {
+      console.log('New client connected');
+      this.handleConnection(ws);
+    });
   }
 
-  async handleConnection(ws) {
-    try {
-      const messages = await this.getLastMessages();
-      ws.send(JSON.stringify({
-        type: 'history',
-        messages: messages
-      }));
+  handleConnection(ws) {
+    ws.on('message', async (message) => {
+      try {
+        const data = JSON.parse(message);
+        console.log('Received:', data);
 
-      ws.on('message', async (data) => {
-        try {
-          const messageData = JSON.parse(data);
-          const savedMessage = await this.saveMessage(messageData);
-          this.broadcastMessage(savedMessage);
-        } catch (error) {
-          console.error('Error handling message:', error);
+        if (data.type === 'username') {
+          // Handle username registration
+          ws.username = data.username;
+          console.log(`User registered: ${data.username}`);
+        } else if (data.type === 'message') {
+          // Save message to database
+          const newMessage = new Message({
+            username: data.username,
+            message: data.message,
+            timestamp: new Date(data.timestamp)
+          });
+          await newMessage.save();
+
+          // Broadcast message to all clients
+          this.broadcastMessage(newMessage);
         }
-      });
-    } catch (error) {
-      console.error('Error in connection handler:', error);
-    }
-  }
+      } catch (error) {
+        console.error('Error handling message:', error);
+      }
+    });
 
-  async getLastMessages() {
-    try {
-      const messages = await Message.find()
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .lean();
-      return messages.reverse();
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      return [];
-    }
-  }
-
-  async saveMessage(messageData) {
-    try {
-      const message = new Message({
-        username: messageData.username,
-        message: messageData.message,
-        timestamp: new Date()
-      });
-      return await message.save();
-    } catch (error) {
-      console.error('Error saving message:', error);
-      throw error;
-    }
+    ws.on('close', () => {
+      console.log('Client disconnected');
+    });
   }
 
   broadcastMessage(message) {
-    this.wss.clients.forEach(client => {
-      if (client.readyState === 1) {
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({
           type: 'message',
           message: message

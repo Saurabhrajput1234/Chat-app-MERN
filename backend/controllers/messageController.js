@@ -9,7 +9,8 @@ class MessageController {
         .lean();
       res.json(messages.reverse());
     } catch (error) {
-      res.status(500).json({ error: 'Error fetching messages' });
+      console.error('Error fetching messages:', error);
+      res.status(500).json({ error: 'Failed to fetch messages' });
     }
   }
 
@@ -26,10 +27,11 @@ class MessageController {
         timestamp: new Date()
       });
 
-      const savedMessage = await newMessage.save();
-      res.status(201).json(savedMessage);
+      await newMessage.save();
+      res.status(201).json(newMessage);
     } catch (error) {
-      res.status(500).json({ error: 'Error creating message' });
+      console.error('Error creating message:', error);
+      res.status(500).json({ error: 'Failed to create message' });
     }
   }
 }
