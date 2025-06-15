@@ -1,6 +1,12 @@
 const WebSocket = require('ws');
 const Message = require('../models/Message');
 
+const allowedOrigins = [
+  'https://chat-app-mern-eosin.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174'
+];
+
 class WebSocketController {
   constructor(wss) {
     this.wss = wss;
@@ -9,9 +15,16 @@ class WebSocketController {
   }
 
   setupWebSocket() {
-    this.wss.on('connection', (ws) => {
-      console.log('New client connected');
-      this.handleConnection(ws);
+    this.wss.on('connection', (ws, req) => {
+      // Check origin
+      const origin = req.headers.origin;
+      if (!origin || allowedOrigins.includes(origin)) {
+        console.log('New client connected from:', origin);
+        this.handleConnection(ws);
+      } else {
+        console.log('Connection rejected from:', origin);
+        ws.close();
+      }
     });
   }
 

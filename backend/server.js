@@ -10,8 +10,28 @@ const messageRoutes = require('./routes/messageRoutes');
 const app = express();
 const server = http.createServer(app);
 
-// Middleware
-app.use(cors());
+// CORS Configuration
+const allowedOrigins = [
+  'https://chat-app-mern-eosin.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174'
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // MongoDB Connection
@@ -25,11 +45,10 @@ mongoose.connect(MONGODB_URI)
 // Initialize WebSocket server
 const wss = new WebSocket.Server({ 
   server,
-  // Increase the maximum payload size
-  maxPayload: 50 * 1024 * 1024, // 50MB
-  // Add ping interval
+  maxPayload: 50 * 1024 * 1024, 
+
   pingInterval: 30000,
-  // Add ping timeout
+ 
   pingTimeout: 60000
 });
 
