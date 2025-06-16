@@ -20,17 +20,12 @@ A modern real-time chat application built with the MERN stack (MongoDB, Express.
 - **Real-time Communication**: WebSocket
 - **Styling**: CSS3
 
-## Prerequisites
-
-- Node.js (v14 or higher)
-- MongoDB
-- npm or yarn
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone (https://github.com/Saurabhrajput1234/Chat-app-MERN.git)
 cd chat-app
 ```
 
@@ -42,7 +37,7 @@ npm install
 
 3. Install frontend dependencies:
 ```bash
-cd ../frontend
+cd /frontend
 npm install
 ```
 
@@ -89,10 +84,8 @@ npm run dev
 - Frontend runs on port 5173
 - WebSocket server runs on the same port as the backend
 
-## License
 
-MIT
 
 ## Author
 
-[Your Name]
+saurabh
