@@ -64,12 +64,23 @@ class WebSocketController {
       if (isProcessing || messageQueue.length === 0) return;
       
       isProcessing = true;
+      const data = messageQueue.shift();
+
       try {
-        const data = messageQueue.shift();
+        if (!data || !data.type) {
+          throw new Error('Invalid message format');
+        }
+
         if (data.type === 'username') {
+          if (!data.username || typeof data.username !== 'string') {
+            throw new Error('Invalid username format');
+          }
           ws.username = data.username;
           ws.send(JSON.stringify({ type: 'ack', status: 'username_set' }));
         } else if (data.type === 'message') {
+          if (!data.username || !data.message || !data.timestamp) {
+            throw new Error('Invalid message format');
+          }
           const newMessage = new Message({
             username: data.username,
             message: data.message,
@@ -78,14 +89,19 @@ class WebSocketController {
           await newMessage.save();
           this.broadcastMessage(newMessage);
           ws.send(JSON.stringify({ type: 'ack', status: 'message_sent' }));
+        } else {
+          throw new Error('Unknown message type');
         }
       } catch (err) {
         console.error('Error processing message:', err);
-        ws.send(JSON.stringify({ type: 'error', message: 'Failed to process message' }));
+        ws.send(JSON.stringify({ 
+          type: 'error', 
+          message: err.message || 'Failed to process message'
+        }));
       } finally {
         isProcessing = false;
         if (messageQueue.length > 0) {
-          processQueue();
+          setTimeout(processQueue, 0);
         }
       }
     };
@@ -93,11 +109,17 @@ class WebSocketController {
     ws.on('message', async (msg) => {
       try {
         const data = JSON.parse(msg);
+        if (!data || typeof data !== 'object') {
+          throw new Error('Invalid message format');
+        }
         messageQueue.push(data);
         processQueue();
       } catch (err) {
         console.error('Error parsing message:', err);
-        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+        ws.send(JSON.stringify({ 
+          type: 'error', 
+          message: 'Invalid message format'
+        }));
       }
     });
 
