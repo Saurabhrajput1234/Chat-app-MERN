@@ -81,14 +81,35 @@ class WebSocketController {
           if (!data.username || !data.message || !data.timestamp) {
             throw new Error('Invalid message format');
           }
-          const newMessage = new Message({
-            username: data.username,
-            message: data.message,
-            timestamp: new Date(data.timestamp)
-          });
-          await newMessage.save();
-          this.broadcastMessage(newMessage);
-          ws.send(JSON.stringify({ type: 'ack', status: 'message_sent' }));
+
+          try {
+            const newMessage = new Message({
+              username: data.username,
+              message: data.message,
+              timestamp: new Date(data.timestamp)
+            });
+
+            // Save message with explicit write concern
+            await newMessage.save({ 
+              writeConcern: { 
+                w: 'majority',
+                wtimeout: 2500
+              }
+            });
+
+            // Broadcast the message
+            this.broadcastMessage(newMessage);
+            
+            // Send acknowledgment
+            ws.send(JSON.stringify({ 
+              type: 'ack', 
+              status: 'message_sent',
+              messageId: newMessage._id
+            }));
+          } catch (dbError) {
+            console.error('Database error:', dbError);
+            throw new Error('Failed to save message to database');
+          }
         } else {
           throw new Error('Unknown message type');
         }
@@ -140,7 +161,12 @@ class WebSocketController {
         try {
           client.send(JSON.stringify({
             type: 'message',
-            message
+            message: {
+              _id: message._id,
+              username: message.username,
+              message: message.message,
+              timestamp: message.timestamp
+            }
           }));
         } catch (err) {
           console.error('Error broadcasting message:', err);

@@ -34,7 +34,28 @@ app.use(cors({
 app.use(express.json());
 
 //Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI;
+let MONGODB_URI = process.env.MONGODB_URI;
+
+// Validate and clean MongoDB URI
+if (MONGODB_URI) {
+  // Remove any accidental spaces or newlines
+  MONGODB_URI = MONGODB_URI.trim();
+  
+  // Ensure proper write concern format
+  if (!MONGODB_URI.includes('w=majority')) {
+    MONGODB_URI = MONGODB_URI.includes('?') 
+      ? `${MONGODB_URI}&w=majority` 
+      : `${MONGODB_URI}?w=majority`;
+  }
+  
+  // Ensure retryWrites is set
+  if (!MONGODB_URI.includes('retryWrites=true')) {
+    MONGODB_URI = MONGODB_URI.includes('?') 
+      ? `${MONGODB_URI}&retryWrites=true` 
+      : `${MONGODB_URI}?retryWrites=true`;
+  }
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 const mongooseOptions = {
@@ -53,11 +74,15 @@ if (isProduction) {
   mongooseOptions.ssl = true;
   mongooseOptions.sslValidate = true;
   mongooseOptions.sslCA = undefined;
-  mongooseOptions.retryWrites = true;
-  mongooseOptions.w = 'majority';
 }
 
+console.log('Environment:', isProduction ? 'production' : 'development');
 console.log('Connecting to MongoDB...');
+
+// Log the sanitized URI (without credentials)
+const sanitizedUri = MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//<credentials>@');
+console.log('MongoDB URI:', sanitizedUri);
+
 mongoose.connect(MONGODB_URI, mongooseOptions)
   .then(() => {
     console.log('MongoDB connected successfully');
@@ -65,7 +90,7 @@ mongoose.connect(MONGODB_URI, mongooseOptions)
   })
   .catch(err => {
     console.error('MongoDB connection error:', err);
-    console.error('Connection URI:', MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//<credentials>@'));
+    console.error('Connection URI:', sanitizedUri);
     process.exit(1);
   });
 
@@ -104,7 +129,6 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on 0.0.0.0:${PORT}`);
-  console.log('Environment:', process.env.NODE_ENV || 'development');
 });
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
