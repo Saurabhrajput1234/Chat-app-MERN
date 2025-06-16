@@ -12,7 +12,7 @@ const messageController = require('./controllers/messageController');
 const app = express();
 const server = http.createServer(app);
 
-//CORS Configuration
+// Allow frontend CORS
 const allowedOrigins = [
   'https://chat-app-mern-web.onrender.com',
   'http://localhost:5173',
@@ -20,36 +20,49 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS policy does not allow this origin'), false);
-    }
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS policy error'), false);
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST'],
   credentials: true
 }));
 
 app.use(express.json());
 
-//Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI;
+// MongoDB Connection
+let MONGODB_URI = process.env.MONGODB_URI?.trim();
+if (MONGODB_URI) {
+  if (!MONGODB_URI.includes('w=majority')) {
+    MONGODB_URI += (MONGODB_URI.includes('?') ? '&' : '?') + 'w=majority';
+  }
+  if (!MONGODB_URI.includes('retryWrites=true')) {
+    MONGODB_URI += '&retryWrites=true';
+  }
+}
+
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('MongoDB connected'))
-.catch(err => console.error('MongoDB error:', err));
+  useUnifiedTopology: true,
+  retryWrites: true,
+  w: 'majority'
+}).then(() => {
+  console.log('MongoDB connected');
+}).catch((err) => {
+  console.error('MongoDB connection error:', err.message);
+  process.exit(1);
+});
 
+// WebSocket
 const wss = new WebSocket.Server({ server });
-new WebSocketController(wss); 
+new WebSocketController(wss);
 
-// REST API Routes
+// API Routes
 app.get('/messages', messageController.getMessages);
 app.post('/messages', messageController.createMessage);
 app.use('/api/messages', messageRoutes);
 
+// Health Check
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
@@ -58,4 +71,16 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// Graceful Shutdown
+['SIGINT', 'SIGTERM'].forEach(signal => {
+  process.on(signal, () => {
+    console.log(`Shutting down due to ${signal}`);
+    server.close(() => {
+      mongoose.connection.close(false, () => {
+        process.exit(0);
+      });
+    });
+  });
 });

@@ -10,60 +10,107 @@ const allowedOrigins = [
 class WebSocketController {
   constructor(wss) {
     this.wss = wss;
-    this.setupWebSocket();
+    this.wss.on('connection', this.handleUpgrade.bind(this));
+    this.startKeepAlive();
   }
 
-  setupWebSocket() {
-    this.wss.on('connection', (ws, req) => {
-      const origin = req.headers.origin;
-      if (!origin || allowedOrigins.includes(origin)) {
-        console.log('Client connected from:', origin || 'unknown');
-        this.handleConnection(ws);
-      } else {
-        console.warn('Connection rejected from:', origin);
-        ws.close(1008, 'Origin not allowed');
-      }
-    });
+  handleUpgrade(ws, req) {
+    const origin = req.headers.origin;
+    if (!origin || !allowedOrigins.includes(origin)) {
+      ws.close(1008, 'Origin not allowed');
+      return;
+    }
+    this.handleConnection(ws);
+  }
+
+  startKeepAlive() {
+    setInterval(() => {
+      this.wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.ping();
+        }
+      });
+    }, 30000);
   }
 
   handleConnection(ws) {
-    ws.on('message', async (msg) => {
+    let messageQueue = [];
+    let isProcessing = false;
+    let isAlive = true;
+
+    ws.on('pong', () => { isAlive = true; });
+
+    const interval = setInterval(() => {
+      if (!isAlive) {
+        ws.terminate();
+        clearInterval(interval);
+        return;
+      }
+      isAlive = false;
+      ws.ping();
+    }, 60000);
+
+    const processQueue = async () => {
+      if (isProcessing || !messageQueue.length) return;
+
+      isProcessing = true;
+      const data = messageQueue.shift();
+
       try {
-        const data = JSON.parse(msg);
-        
         if (data.type === 'username') {
           ws.username = data.username;
           ws.send(JSON.stringify({ type: 'ack', status: 'username_set' }));
-        } 
-        else if (data.type === 'message') {
-          const newMessage = new Message({
-            username: data.username,
-            message: data.message,
-            timestamp: new Date(data.timestamp)
-          });
+        } else if (data.type === 'message') {
+          const { username, message, timestamp } = data;
+          const newMessage = new Message({ username, message, timestamp: new Date(timestamp) });
 
-          await newMessage.save();
+          await newMessage.save({ writeConcern: { w: 'majority', wtimeout: 2500 } });
+
           this.broadcastMessage(newMessage);
-          ws.send(JSON.stringify({ type: 'ack', status: 'message_sent' }));
+          ws.send(JSON.stringify({ type: 'ack', status: 'message_sent', messageId: newMessage._id }));
+        } else {
+          throw new Error('Unknown message type');
         }
       } catch (err) {
-        console.error('Error processing message:', err);
-        ws.send(JSON.stringify({ type: 'error', message: 'Failed to process message' }));
+        ws.send(JSON.stringify({ type: 'error', message: err.message }));
+      } finally {
+        isProcessing = false;
+        if (messageQueue.length) setTimeout(processQueue, 0);
+      }
+    };
+
+    ws.on('message', (msg) => {
+      try {
+        const data = JSON.parse(msg);
+        if (typeof data === 'object') {
+          messageQueue.push(data);
+          processQueue();
+        } else {
+          throw new Error();
+        }
+      } catch {
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
       }
     });
 
-    ws.on('close', () => {
-      console.log('Client disconnected');
-    });
+    ws.on('close', () => clearInterval(interval));
+    ws.on('error', () => clearInterval(interval));
   }
 
   broadcastMessage(message) {
-    this.wss.clients.forEach((client) => {
+    const payload = JSON.stringify({
+      type: 'message',
+      message: {
+        _id: message._id,
+        username: message.username,
+        message: message.message,
+        timestamp: message.timestamp
+      }
+    });
+
+    this.wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'message',
-          message
-        }));
+        client.send(payload);
       }
     });
   }
