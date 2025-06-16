@@ -35,10 +35,52 @@ app.use(express.json());
 
 //Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI;
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB error:', err));
+const isProduction = process.env.NODE_ENV === 'production';
 
+const mongooseOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  family: 4,
+  retryWrites: true,
+  w: 'majority',
+  wtimeoutMS: 2500
+};
+
+// Add additional options for production
+if (isProduction) {
+  mongooseOptions.ssl = true;
+  mongooseOptions.sslValidate = true;
+  mongooseOptions.sslCA = undefined;
+  mongooseOptions.retryWrites = true;
+  mongooseOptions.w = 'majority';
+}
+
+console.log('Connecting to MongoDB...');
+mongoose.connect(MONGODB_URI, mongooseOptions)
+  .then(() => {
+    console.log('MongoDB connected successfully');
+    console.log('Connection state:', mongoose.connection.readyState);
+  })
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    console.error('Connection URI:', MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//<credentials>@'));
+    process.exit(1);
+  });
+
+// Handle MongoDB connection errors
+mongoose.connection.on('error', err => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+});
+
+mongoose.connection.on('connected', () => {
+  console.log('MongoDB connected');
+});
 
 const wss = new WebSocket.Server({ server });
 
@@ -49,17 +91,21 @@ app.get('/messages', messageController.getMessages);
 app.post('/messages', messageController.createMessage);
 app.use('/api/messages', messageRoutes);
 
-
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  const dbState = mongoose.connection.readyState;
+  res.status(200).json({ 
+    status: 'ok',
+    database: dbState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on 0.0.0.0:${PORT}`);
+  console.log('Environment:', process.env.NODE_ENV || 'development');
 });
-
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
