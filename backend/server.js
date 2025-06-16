@@ -12,7 +12,7 @@ const messageController = require('./controllers/messageController');
 const app = express();
 const server = http.createServer(app);
 
-// Allow frontend CORS
+
 const allowedOrigins = [
   'https://chat-app-mern-web.onrender.com',
   'http://localhost:5173',
@@ -30,7 +30,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// MongoDB Connection
+
 let MONGODB_URI = process.env.MONGODB_URI?.trim();
 if (MONGODB_URI) {
   if (!MONGODB_URI.includes('w=majority')) {
@@ -57,17 +57,16 @@ mongoose.connect(MONGODB_URI, {
 const wss = new WebSocket.Server({ server });
 new WebSocketController(wss);
 
-// API Routes
+
 app.get('/messages', messageController.getMessages);
 app.post('/messages', messageController.createMessage);
 app.use('/api/messages', messageRoutes);
 
-// Health Check
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Start Server
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);

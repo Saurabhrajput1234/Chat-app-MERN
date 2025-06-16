@@ -68,13 +68,13 @@ const Chat = () => {
         setIsConnected(true);
         setError('');
         
-        // Send username to server
+     
         ws.current.send(JSON.stringify({
           type: 'username',
           username: username
         }));
 
-        // Fetch previous messages after connection
+       
         fetchMessages();
       };
 
