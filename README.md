@@ -20,11 +20,6 @@ A modern real-time chat application built with the MERN stack (MongoDB, Express.
 - **Real-time Communication**: WebSocket
 - **Styling**: CSS3
 
-## Prerequisites
-
-- Node.js (v14 or higher)
-- MongoDB
-- npm
 
 ## Installation
 
