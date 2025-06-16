@@ -7,11 +7,9 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const ws = useRef(null);
   const messagesEndRef = useRef(null);
   const reconnectTimeout = useRef(null);
-  const messageQueue = useRef([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,21 +43,6 @@ const Chat = () => {
     }
   };
 
-  const processMessageQueue = () => {
-    if (messageQueue.current.length > 0 && !isSending) {
-      const nextMessage = messageQueue.current[0];
-      try {
-        ws.current.send(JSON.stringify(nextMessage));
-        setIsSending(true);
-      } catch (error) {
-        console.error('Error sending message:', error);
-        setError('Failed to send message. Please try again.');
-        messageQueue.current.shift();
-        setIsSending(false);
-      }
-    }
-  };
-
   const connectWebSocket = () => {
     if (!username.trim()) {
       setError('Please enter a username');
@@ -86,11 +69,10 @@ const Chat = () => {
         setError('');
         
         // Send username to server
-        messageQueue.current.push({
+        ws.current.send(JSON.stringify({
           type: 'username',
-          username: username.trim()
-        });
-        processMessageQueue();
+          username: username
+        }));
 
         // Fetch previous messages after connection
         fetchMessages();
@@ -105,18 +87,8 @@ const Chat = () => {
             setMessages(prev => [...prev, data.message]);
           } else if (data.type === 'ack') {
             console.log('Received acknowledgment:', data.status);
-            if (data.status === 'message_sent') {
-              messageQueue.current.shift();
-              setIsSending(false);
-              processMessageQueue();
-            }
           } else if (data.type === 'error') {
             setError(data.message);
-            if (isSending) {
-              messageQueue.current.shift();
-              setIsSending(false);
-              processMessageQueue();
-            }
           }
         } catch (err) {
           console.error('Error parsing message:', err);
@@ -159,15 +131,19 @@ const Chat = () => {
 
     const messageData = {
       type: 'message',
-      username: username.trim(),
+      username: username,
       message: message.trim(),
       timestamp: new Date().toISOString()
     };
 
-    messageQueue.current.push(messageData);
-    setMessage('');
-    setError('');
-    processMessageQueue();
+    try {
+      ws.current.send(JSON.stringify(messageData));
+      setMessage('');
+      setError('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setError('Failed to send message. Please try again.');
+    }
   };
 
   if (!isConnected) {
@@ -215,11 +191,8 @@ const Chat = () => {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Type a message..."
-          disabled={isSending}
         />
-        <button type="submit" disabled={isSending}>
-          {isSending ? 'Sending...' : 'Send'}
-        </button>
+        <button type="submit">Send</button>
       </form>
     </div>
   );
