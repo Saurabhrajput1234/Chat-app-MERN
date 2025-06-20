@@ -22,7 +22,7 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  padding: 60px;
   background: #fff9e6;
 }
 
@@ -198,7 +198,7 @@
 
 @media (max-width: 480px) {
   .login-container {
-    padding: 15px;
+    padding: 30px;
   }
 
   .chat-header {

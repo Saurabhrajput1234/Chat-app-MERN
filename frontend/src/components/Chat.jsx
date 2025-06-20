@@ -7,143 +7,103 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState('');
+  
   const ws = useRef(null);
-  const messagesEndRef = useRef(null);
   const reconnectTimeout = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const wsUrl = import.meta.env.VITE_WS_URL;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useEffect(scrollToBottom, [messages]);
 
   useEffect(() => {
     return () => {
-      if (ws.current) {
-        ws.current.close();
-      }
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-      }
+      ws.current?.close();
+      clearTimeout(reconnectTimeout.current);
     };
   }, []);
 
   const fetchMessages = async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${apiUrl}/messages`);
-      if (!response.ok) throw new Error('Failed to fetch messages');
-      const data = await response.json();
+      const res = await fetch(`${apiUrl}/api/messages`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
       setMessages(data);
-    } catch (err) {
-      console.error('Error fetching messages:', err);
+    } catch {
       setError('Failed to load messages');
     }
   };
 
   const connectWebSocket = () => {
     if (!username.trim()) {
-      setError('Please enter a username');
+      setError('Enter a username');
       return;
     }
 
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.close();
+    ws.current?.close(); // Close existing connection
+
+    if (!wsUrl) {
+      setError('WebSocket URL missing');
+      return;
     }
 
-    try {
-      const wsUrl = import.meta.env.VITE_WS_URL;
-      if (!wsUrl) {
-        setError('WebSocket URL not configured');
-        return;
-      }
+    ws.current = new WebSocket(wsUrl);
 
-      console.log('Connecting to WebSocket:', wsUrl);
-      ws.current = new WebSocket(wsUrl);
+    ws.current.onopen = () => {
+      setIsConnected(true);
+      setError('');
+      ws.current.send(JSON.stringify({ type: 'username', username }));
+      fetchMessages();
+    };
 
-      ws.current.onopen = () => {
-        console.log('WebSocket connected');
-        setIsConnected(true);
-        setError('');
-        
-     
-        ws.current.send(JSON.stringify({
-          type: 'username',
-          username: username
-        }));
-
-       
-        fetchMessages();
-      };
-
-      ws.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received message:', data);
-          
-          if (data.type === 'message') {
-            setMessages(prev => [...prev, data.message]);
-          } else if (data.type === 'ack') {
-            console.log('Received acknowledgment:', data.status);
-          } else if (data.type === 'error') {
-            setError(data.message);
-          }
-        } catch (err) {
-          console.error('Error parsing message:', err);
-          setError('Invalid message received');
+    ws.current.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'message') {
+          setMessages(prev => [...prev, data.message]);
+        } else if (data.type === 'error') {
+          setError(data.message);
         }
-      };
+      } catch {
+        setError('Invalid message received');
+      }
+    };
 
-      ws.current.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
-        setIsConnected(false);
-        setError('Connection lost. Reconnecting...');
-        
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeout.current = setTimeout(() => {
-          if (username) {
-            connectWebSocket();
-          }
-        }, 3000);
-      };
-
-      ws.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setError('Connection error. Please try again.');
-        setIsConnected(false);
-      };
-    } catch (error) {
-      console.error('Error setting up WebSocket:', error);
-      setError('Failed to connect. Please try again.');
+    ws.current.onclose = () => {
       setIsConnected(false);
-    }
+      setError('Disconnected. Reconnecting...');
+      reconnectTimeout.current = setTimeout(() => {
+        if (username) connectWebSocket();
+      }, 3000);
+    };
+
+    ws.current.onerror = () => {
+      setError('WebSocket error');
+      setIsConnected(false);
+    };
   };
 
   const sendMessage = (e) => {
     e.preventDefault();
-    
     if (!message.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      setError('Cannot send message: Connection not available');
+      setError('Cannot send message');
       return;
     }
 
-    const messageData = {
+    ws.current.send(JSON.stringify({
       type: 'message',
-      username: username,
+      username,
       message: message.trim(),
       timestamp: new Date().toISOString()
-    };
+    }));
 
-    try {
-      ws.current.send(JSON.stringify(messageData));
-      setMessage('');
-      setError('');
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setError('Failed to send message. Please try again.');
-    }
+    setMessage('');
+    setError('');
   };
 
   if (!isConnected) {
@@ -157,7 +117,7 @@ const Chat = () => {
             placeholder="Enter your username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && connectWebSocket()}
+            onKeyDown={(e) => e.key === 'Enter' && connectWebSocket()}
           />
           <button onClick={connectWebSocket}>Join</button>
         </div>
@@ -171,15 +131,15 @@ const Chat = () => {
         <h2>Chat Room</h2>
         <span className="status">Connected as: {username}</span>
       </div>
+
       {error && <div className="error-message">{error}</div>}
+
       <div className="messages-container">
-        {messages.map((msg, index) => (
-          <div key={index} className={`message ${msg.username === username ? 'own-message' : ''}`}>
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`message ${msg.username === username ? 'own-message' : ''}`}>
             <span className="username">{msg.username}</span>
             <p className="message-text">{msg.message}</p>
-            <span className="timestamp">
-              {new Date(msg.timestamp).toLocaleTimeString()}
-            </span>
+            <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString()}</span>
           </div>
         ))}
         <div ref={messagesEndRef} />
@@ -198,4 +158,4 @@ const Chat = () => {
   );
 };
 
-export default Chat; 
+export default Chat;
