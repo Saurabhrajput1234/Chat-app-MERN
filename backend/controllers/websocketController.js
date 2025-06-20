@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const Message = require('../models/Message');
 
+// Allowed frontend origins
 const allowedOrigins = [
   'https://chat-app-mern-web.onrender.com',
   'http://localhost:5173',
@@ -10,86 +11,68 @@ const allowedOrigins = [
 function setupWebSocket(wss) {
   wss.on('connection', (ws, req) => {
     const origin = req.headers.origin;
+
+    // CORS
     if (!origin || !allowedOrigins.includes(origin)) {
+      console.log('Blocked connection from disallowed origin:', origin);
       ws.close(1008, 'Origin not allowed');
       return;
     }
 
-    handleConnection(ws, wss);
-  });
+    console.log('WebSocket connected from:', origin);
 
-  // Keep-alive ping every 30 seconds
-  setInterval(() => {
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.ping();
+    ws.isAlive = true;
+
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
+    ws.on('message', async (msg) => {
+      try {
+        const data = JSON.parse(msg);
+
+        if (data.type === 'username') {
+          ws.username = data.username;
+          ws.send(JSON.stringify({ type: 'ack', status: 'username_set' }));
+        } else if (data.type === 'message') {
+          const { username, message, timestamp } = data;
+          const newMessage = new Message({ username, message, timestamp: new Date(timestamp) });
+          await newMessage.save({ writeConcern: { w: 'majority', wtimeout: 2500 } });
+          broadcastMessage(newMessage, wss);
+          ws.send(JSON.stringify({ type: 'ack', status: 'message_sent', messageId: newMessage._id }));
+        } else {
+          throw new Error('Unknown message type');
+        }
+      } catch (err) {
+        ws.send(JSON.stringify({ type: 'error', message: err.message }));
       }
     });
-  }, 30000);
-}
 
-function handleConnection(ws, wss) {
-  let messageQueue = [];
-  let isProcessing = false;
-  let isAlive = true;
+    ws.on('close', () => {
+      console.log('WebSocket closed');
+    });
 
-  ws.on('pong', () => { isAlive = true; });
-
-  const pingInterval = setInterval(() => {
-    if (!isAlive) {
-      ws.terminate();
-      clearInterval(pingInterval);
-      return;
-    }
-    isAlive = false;
-    ws.ping();
-  }, 60000);
-
-  ws.on('message', (msg) => {
-    try {
-      const data = JSON.parse(msg);
-      if (typeof data === 'object') {
-        messageQueue.push(data);
-        processQueue();
-      } else {
-        throw new Error();
-      }
-    } catch {
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
-    }
+    ws.on('error', (err) => {
+      console.error('WebSocket error:', err.message);
+    });
   });
 
-  ws.on('close', () => clearInterval(pingInterval));
-  ws.on('error', () => clearInterval(pingInterval));
-
-  async function processQueue() {
-    if (isProcessing || !messageQueue.length) return;
-
-    isProcessing = true;
-    const data = messageQueue.shift();
-
-    try {
-      if (data.type === 'username') {
-        ws.username = data.username;
-        ws.send(JSON.stringify({ type: 'ack', status: 'username_set' }));
-      } else if (data.type === 'message') {
-        const { username, message, timestamp } = data;
-        const newMessage = new Message({ username, message, timestamp: new Date(timestamp) });
-
-        await newMessage.save({ writeConcern: { w: 'majority', wtimeout: 2500 } });
-
-        broadcastMessage(newMessage, wss);
-        ws.send(JSON.stringify({ type: 'ack', status: 'message_sent', messageId: newMessage._id }));
-      } else {
-        throw new Error('Unknown message type');
+  // Ping clients every 30 seconds
+  const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) {
+        console.log('Terminating unresponsive client');
+        return ws.terminate();
       }
-    } catch (err) {
-      ws.send(JSON.stringify({ type: 'error', message: err.message }));
-    } finally {
-      isProcessing = false;
-      if (messageQueue.length) setTimeout(processQueue, 0);
-    }
-  }
+
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+
+  wss.on('close', () => {
+    clearInterval(interval);
+  });
 }
 
 function broadcastMessage(message, wss) {
